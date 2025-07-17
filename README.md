@@ -12,3 +12,5 @@ check-interval: How often the plugin checks for a Warden in ticks (Default = 40)
 blocked-commands: The list of commands that are blocked when a player is in the detection radius
 
 block-message: The message sent in chat if a player tries tping when a Warden is nearby
+
+/wardenblocker reload - reloads the plugin (requires op)
