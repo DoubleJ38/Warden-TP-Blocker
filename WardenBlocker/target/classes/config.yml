@@ -1,0 +1,10 @@
+detection-radius: 30
+check-interval: 40 # in ticks (20 ticks = 1 second)
+blocked-commands:
+  - /tpa
+  - /tpaccept
+  - /tpahere
+  - /home
+  - /spawn
+  - /back
+block-message: "&cYou cannot teleport while a Warden is nearby!"
