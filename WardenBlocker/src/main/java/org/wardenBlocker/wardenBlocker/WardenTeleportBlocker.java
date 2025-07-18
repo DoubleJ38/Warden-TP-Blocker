@@ -18,14 +18,21 @@ public class WardenTeleportBlocker implements Listener {
     public void onTeleport(PlayerTeleportEvent event) {
         Player player = event.getPlayer();
 
-        if (plugin.isBlocked(player)) return;
+        if (!plugin.isBlocked(player)) return;
 
-        // Optionally allow some causes like END_PORTAL or SPECTATE
         TeleportCause cause = event.getCause();
-        if (cause == TeleportCause.CHORUS_FRUIT || cause == TeleportCause.NETHER_PORTAL || cause == TeleportCause.END_PORTAL) {
-            return; // allow natural/mobility-based teleporting if you want
+
+        // Allow all natural teleport causes
+        switch (cause) {
+            case CHORUS_FRUIT:
+            case ENDER_PEARL:
+            case NETHER_PORTAL:
+            case END_PORTAL:
+            case SPECTATE:
+                return;
         }
 
+        // Block command and plugin-based teleports
         event.setCancelled(true);
         String message = plugin.getConfig().getString("block-message", "&cTeleport blocked!");
         player.sendMessage(message.replace("&", "§"));

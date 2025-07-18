@@ -1,20 +1,24 @@
 package org.wardenBlocker.wardenBlocker;
 
-import org.bukkit.Bukkit;
+import org.bukkit.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Player;
+import org.bukkit.entity.*;
+import org.bukkit.event.*;
+import org.bukkit.event.entity.*;
+import org.bukkit.event.world.ChunkUnloadEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class WardenBlocker extends JavaPlugin {
+public class WardenBlocker extends JavaPlugin implements Listener {
 
     private final Set<UUID> blockedPlayers = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> activeWardens = ConcurrentHashMap.newKeySet();
+
     private int detectionRadius;
     private int checkInterval;
 
@@ -25,10 +29,18 @@ public class WardenBlocker extends JavaPlugin {
 
         Bukkit.getPluginManager().registerEvents(new WardenCommandBlocker(this), this);
         Bukkit.getPluginManager().registerEvents(new WardenTeleportBlocker(this), this);
+        Bukkit.getPluginManager().registerEvents(this, this);
 
-        // Run detection async to prevent lag
-        Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::updateBlockedPlayers, 0L, checkInterval);
+        // Scan for loaded wardens
+        Bukkit.getWorlds().forEach(world -> {
+            for (Entity entity : world.getEntitiesByClass(Warden.class)) {
+                if (entity.isValid() && entity.isPersistent() && entity.getLocation().getChunk().isLoaded()) {
+                    activeWardens.add(entity.getUniqueId());
+                }
+            }
+        });
 
+        Bukkit.getScheduler().runTaskTimer(this, this::updateBlockedPlayers, 0L, checkInterval);
         getLogger().info("WardenBlocker enabled! Detection radius: " + detectionRadius + ", check interval: " + checkInterval + " ticks.");
     }
 
@@ -39,20 +51,69 @@ public class WardenBlocker extends JavaPlugin {
 
     private void updateBlockedPlayers() {
         blockedPlayers.clear();
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            // Use scheduleSync for main-thread Bukkit call
-            Bukkit.getScheduler().runTask(this, () -> {
-                boolean nearWarden = player.getNearbyEntities(detectionRadius, detectionRadius, detectionRadius)
-                        .stream().anyMatch(e -> e.getType() == EntityType.WARDEN);
-                if (nearWarden) {
-                    blockedPlayers.add(player.getUniqueId());
+
+        if (activeWardens.isEmpty()) return;
+
+        // Get only *loaded* wardens
+        List<LivingEntity> loadedWardens = new ArrayList<>();
+        for (World world : Bukkit.getWorlds()) {
+            for (LivingEntity entity : world.getEntitiesByClass(Warden.class)) {
+                if (entity.isValid() && entity.getLocation().getChunk().isLoaded()) {
+                    loadedWardens.add(entity);
                 }
-            });
+            }
+        }
+
+        if (loadedWardens.isEmpty()) return;
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            for (LivingEntity warden : loadedWardens) {
+                if (warden.getLocation().distanceSquared(player.getLocation()) <= detectionRadius * detectionRadius) {
+                    blockedPlayers.add(player.getUniqueId());
+                    break;
+                }
+            }
         }
     }
 
     public boolean isBlocked(Player player) {
         return blockedPlayers.contains(player.getUniqueId());
+    }
+
+    // Track wardens when they spawn
+    @EventHandler
+    public void onEntitySpawn(EntitySpawnEvent event) {
+        if (event.getEntityType() == EntityType.WARDEN) {
+            activeWardens.add(event.getEntity().getUniqueId());
+        }
+    }
+
+    // Remove wardens from tracker when they die
+    @EventHandler
+    public void onEntityDeath(EntityDeathEvent event) {
+        if (event.getEntityType() == EntityType.WARDEN) {
+            activeWardens.remove(event.getEntity().getUniqueId());
+        }
+    }
+
+    // Remove wardens from tracker when chunks unload
+    @EventHandler
+    public void onChunkUnload(ChunkUnloadEvent event) {
+        for (Entity entity : event.getChunk().getEntities()) {
+            if (entity.getType() == EntityType.WARDEN) {
+                activeWardens.remove(entity.getUniqueId());
+            }
+        }
+    }
+
+    // Add wardens back to tracker when chunks load (if valid)
+    @EventHandler
+    public void onChunkLoad(ChunkLoadEvent event) {
+        for (Entity entity : event.getChunk().getEntities()) {
+            if (entity.getType() == EntityType.WARDEN) {
+                activeWardens.add(entity.getUniqueId());
+            }
+        }
     }
 
     @Override

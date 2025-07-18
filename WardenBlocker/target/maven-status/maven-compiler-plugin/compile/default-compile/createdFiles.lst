@@ -1,3 +1,4 @@
 org\wardenBlocker\wardenBlocker\WardenBlocker.class
 org\wardenBlocker\wardenBlocker\WardenCommandBlocker.class
 org\wardenBlocker\wardenBlocker\WardenTeleportBlocker.class
+org\wardenBlocker\wardenBlocker\WardenTeleportBlocker$1.class
