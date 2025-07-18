@@ -6,14 +6,15 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.jetbrains.annotations.NotNull;
 
-import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class WardenBlocker extends JavaPlugin {
 
-    private final Set<UUID> blockedPlayers = new HashSet<>();
+    private final Set<UUID> blockedPlayers = ConcurrentHashMap.newKeySet();
     private int detectionRadius;
     private int checkInterval;
 
@@ -25,7 +26,8 @@ public class WardenBlocker extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new WardenCommandBlocker(this), this);
         Bukkit.getPluginManager().registerEvents(new WardenTeleportBlocker(this), this);
 
-        Bukkit.getScheduler().runTaskTimer(this, this::updateBlockedPlayers, 0L, checkInterval);
+        // Run detection async to prevent lag
+        Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::updateBlockedPlayers, 0L, checkInterval);
 
         getLogger().info("WardenBlocker enabled! Detection radius: " + detectionRadius + ", check interval: " + checkInterval + " ticks.");
     }
@@ -38,11 +40,14 @@ public class WardenBlocker extends JavaPlugin {
     private void updateBlockedPlayers() {
         blockedPlayers.clear();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            boolean nearWarden = player.getNearbyEntities(detectionRadius, detectionRadius, detectionRadius)
-                    .stream().anyMatch(e -> e.getType() == EntityType.WARDEN);
-            if (nearWarden) {
-                blockedPlayers.add(player.getUniqueId());
-            }
+            // Use scheduleSync for main-thread Bukkit call
+            Bukkit.getScheduler().runTask(this, () -> {
+                boolean nearWarden = player.getNearbyEntities(detectionRadius, detectionRadius, detectionRadius)
+                        .stream().anyMatch(e -> e.getType() == EntityType.WARDEN);
+                if (nearWarden) {
+                    blockedPlayers.add(player.getUniqueId());
+                }
+            });
         }
     }
 
@@ -51,7 +56,7 @@ public class WardenBlocker extends JavaPlugin {
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, String[] args) {
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             if (!sender.hasPermission("wardenblocker.reload")) {
                 sender.sendMessage("§cYou do not have permission to do that.");

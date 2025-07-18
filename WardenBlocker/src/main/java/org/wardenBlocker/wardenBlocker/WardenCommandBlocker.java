@@ -18,15 +18,26 @@ public class WardenCommandBlocker implements Listener {
     @EventHandler
     public void onCommand(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
-        if (!plugin.isBlocked(player)) return;
+        if (plugin.isBlocked(player)) return;
 
-        String msg = event.getMessage().toLowerCase().split(" ")[0]; // command part only
+        // Split command safely
+        String[] parts = event.getMessage().toLowerCase().trim().split("\\s+");
+        if (parts.length == 0) return;
+
+        String command = parts[0]; // includes leading "/"
         List<String> blocked = plugin.getConfig().getStringList("blocked-commands");
 
-        if (blocked.stream().anyMatch(msg::startsWith)) {
-            event.setCancelled(true);
-            String message = plugin.getConfig().getString("block-message", "&cTeleport blocked!");
-            player.sendMessage(message.replace("&", "§"));
+        // Remove leading slash for comparison if config doesn't include it
+        String cleanCommand = command.startsWith("/") ? command.substring(1) : command;
+
+        for (String blockedCommand : blocked) {
+            String blockedClean = blockedCommand.startsWith("/") ? blockedCommand.substring(1) : blockedCommand;
+            if (cleanCommand.startsWith(blockedClean)) {
+                event.setCancelled(true);
+                String message = plugin.getConfig().getString("block-message", "&cTeleport blocked!");
+                player.sendMessage(message.replace("&", "§"));
+                break;
+            }
         }
     }
 }
